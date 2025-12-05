@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #define PI 3.1415926
 
-#define StancePullHight 0			// 6
-#define StancePullHightDiag 0    //-4
+#define StancePullHight 6			// 6
+#define StancePullHightDiag -4    //-4
 #define transferForceX 5
 #define TrialCorrectionHeight 5.0
 
@@ -132,6 +132,13 @@ void TerrainAdaptation(struct_MC *p)
     int stance_count = 0;
 
     for(int i=0; i<4; i++) {
+		// 还原真实的物理坐标，剔除人为的校准垫片 (offset)
+        // 这样算法看到的 LF, RF, LH, RH 的 Z 值在平地上将是完全一致的
+        float raw_x = p->ftsPos.element[i][0] - p->ftsPosOffset.element[i][0];
+        float raw_y = p->ftsPos.element[i][1] - p->ftsPosOffset.element[i][1];
+        float raw_z = p->ftsPos.element[i][2] - p->ftsPosOffset.element[i][2];
+        // ===============================================
+
         // 计算足端相对于机身中心的坐标
         feet_pos[i][0] = p->shoulderPos.element[i][0] + p->ftsPos.element[i][0];
         feet_pos[i][1] = p->shoulderPos.element[i][1] + p->ftsPos.element[i][1];
@@ -145,29 +152,32 @@ void TerrainAdaptation(struct_MC *p)
     }
 
     // 2. 拟合平面法向量 (至少需要3个点)
-    // 如果支撑腿少于3个（比如Trot腾空瞬间），保持上一时刻的估计值
+	// 如果支撑腿少于3个，无法拟合
     if(stance_count < 3) return; 
 
-    // 选取三个点构成两个向量 (这里简单取前三个支撑点，更优做法是选面积最大的三角形)
-    float v1[3], v2[3], normal[3];
-    int idx0 = stance_legs[0];
-    int idx1 = stance_legs[1];
-    int idx2 = stance_legs[2];
-
-    // v1 = P1 - P0
-    v1[0] = feet_pos[idx1][0] - feet_pos[idx0][0];
-    v1[1] = feet_pos[idx1][1] - feet_pos[idx0][1];
-    v1[2] = feet_pos[idx1][2] - feet_pos[idx0][2];
-
-    // v2 = P2 - P0
-    v2[0] = feet_pos[idx2][0] - feet_pos[idx0][0];
-    v2[1] = feet_pos[idx2][1] - feet_pos[idx0][1];
-    v2[2] = feet_pos[idx2][2] - feet_pos[idx0][2];
-
-    // 法向量 n = v1 x v2
-    VecCross(v1, v2, normal);
+    // 【核心修改】计算两条对角线的向量，然后求叉积
+    // 这种方法平等地利用了四条腿的信息，不仅对称，而且对单腿误差不敏感
     
-    // 确保法向量指向上方 (Z > 0)，如果朝下则反转
+    // 向量 A: 左后 -> 右前 (LH -> RF)
+    // 也就是 P1(RF) - P2(LH)
+    float v_diagA[3];
+    v_diagA[0] = feet_pos[1][0] - feet_pos[2][0];
+    v_diagA[1] = feet_pos[1][1] - feet_pos[2][1];
+    v_diagA[2] = feet_pos[1][2] - feet_pos[2][2];
+
+    // 向量 B: 右后 -> 左前 (RH -> LF)
+    // 也就是 P0(LF) - P3(RH)
+    float v_diagB[3];
+    v_diagB[0] = feet_pos[0][0] - feet_pos[3][0];
+    v_diagB[1] = feet_pos[0][1] - feet_pos[3][1];
+    v_diagB[2] = feet_pos[0][2] - feet_pos[3][2];
+
+    // 法向量 n = v_diagA x v_diagB
+    // 这相当于计算了两条对角线构成的平面的法向，能够平均化四条腿的高度
+    float normal[3];
+    VecCross(v_diagA, v_diagB, normal);
+    
+    // 确保法向量向上
     if(normal[2] < 0) {
         normal[0] = -normal[0];
         normal[1] = -normal[1];
@@ -299,8 +309,8 @@ case 0x03:	//	offset of initial position	in 180 degrees	; Amble
 																12*p->timeGait/16, 	15*p->timeGait/16,		
 																4*p->timeGait/16, 	7*p->timeGait/16};	
 	MatSetVal(&p->timeForSwingPhase, timeForSwingPhase3); 
-	float pressHightBuffer3[4]={14, 22, 20, 16};//{14, 22, 20, 16};
-	float stepHightBuffer3[4]={14, 20, 16, 20};//{16, 16, 18, 18};
+	float pressHightBuffer3[4]={14, 14, 20, 16};//{14, 22, 20, 16};
+	float stepHightBuffer3[4]={18, 14, 16, 20};//{16, 16, 18, 18};
 	for(int i=0; i<4; i++)
 	{
 		p->pressHight[i] = pressHightBuffer3[i];
@@ -774,26 +784,26 @@ if( p->gaitMode == 2 || p->gaitMode == 5 || p->gaitMode == 9)//
 
 
 //	make body close to the surface in amble 
-// if( p->gaitMode == 3 || p->gaitMode == 10||p->gaitMode ==0X0D )	// || p->gaitMode == 5
-// {
-// 	float stancePull[4]={StancePullHight,StancePullHight,StancePullHight,StancePullHight};
-// 	int swingLeg;
-// 	for(int i=0;i<4;i++)
-// 	{
-// 		if(p->legStatus[i] != 0)
-// 		{
-// 				stancePull[3-i] = StancePullHightDiag;	// [3-legNum] mean to diagnal leg
-// 				swingLeg=i;
-// 		}
-// 	}
+if( p->gaitMode == 3 || p->gaitMode == 10||p->gaitMode ==0X0D )	// || p->gaitMode == 5
+{
+	float stancePull[4]={StancePullHight,StancePullHight,StancePullHight,StancePullHight};
+	int swingLeg;
+	for(int i=0;i<4;i++)
+	{
+		if(p->legStatus[i] != 0)
+		{
+				stancePull[3-i] = StancePullHightDiag;	// [3-legNum] mean to diagnal leg
+				swingLeg=i;
+		}
+	}
 	
-// 	if(p->legStatus[swingLeg]==3&&p->statusTimes[swingLeg]>0)
-// 		p->footPos.element[legNum][2] += stancePull[legNum] /  (p->statusTimesBuffer[swingLeg][3] + p->statusTimesBuffer[swingLeg][4]);
-// 	if(p->legStatus[swingLeg]==4&&p->statusTimes[swingLeg]>0)
-// 		p->footPos.element[legNum][2] += stancePull[legNum] /  (p->statusTimesBuffer[swingLeg][3] + p->statusTimesBuffer[swingLeg][4]);
-// 	if(p->legStatus[swingLeg]==6&&p->statusTimes[swingLeg]>0)
-// 		p->footPos.element[legNum][2] -= stancePull[legNum] /  p->statusTimesBuffer[swingLeg][6]; 
-// }
+	if(p->legStatus[swingLeg]==3&&p->statusTimes[swingLeg]>0)
+		p->footPos.element[legNum][2] += stancePull[legNum] /  (p->statusTimesBuffer[swingLeg][3] + p->statusTimesBuffer[swingLeg][4]);
+	if(p->legStatus[swingLeg]==4&&p->statusTimes[swingLeg]>0)
+		p->footPos.element[legNum][2] += stancePull[legNum] /  (p->statusTimesBuffer[swingLeg][3] + p->statusTimesBuffer[swingLeg][4]);
+	if(p->legStatus[swingLeg]==6&&p->statusTimes[swingLeg]>0)
+		p->footPos.element[legNum][2] -= stancePull[legNum] /  p->statusTimesBuffer[swingLeg][6]; 
+}
 
 
 /*	Don't use p->presentTime.
@@ -993,7 +1003,7 @@ for( legNum=0; legNum<4; legNum++)  // run all 4 legs
 		rate[0]=1.0;
 		rate[1]=1.0;
 		v_rate[0] = 0;
-		v_rate[1] = 0; //-0.2y,  -0.7 xy=2,
+		v_rate[1] = 0.25; //-0.2y,  -0.7 xy=2,
 		velocitybias[0]=p->timePeriod * 2;
 		velocitybias[1]=p->timePeriod * 2;
 	}
@@ -1001,8 +1011,8 @@ for( legNum=0; legNum<4; legNum++)  // run all 4 legs
 	{
 		rate[0]=1;
 		rate[1]=1.0;
-		v_rate[0] = 0.25;
-		v_rate[1] = 0.25;
+		v_rate[0] = 0;
+		v_rate[1] = 0.5;
 		velocitybias[0]=p->timePeriod * 2;
 		velocitybias[1]=p->timePeriod * 2;
 	}
@@ -1019,8 +1029,8 @@ for( legNum=0; legNum<4; legNum++)  // run all 4 legs
 	{
 		rate[0]=1;
 		rate[1]=1;
-		v_rate[0] = 0.25;   
-		v_rate[1] = 1;   
+		v_rate[0] = 0;   
+		v_rate[1] = 0.5;   
 		velocitybias[0]=p->timePeriod * 2;
 		velocitybias[1]=p->timePeriod * 2;
 	}

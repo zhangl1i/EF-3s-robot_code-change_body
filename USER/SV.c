@@ -238,11 +238,15 @@ void air_control_status(struct_MC *p, int closeFlag)
 	float prePositive = 1- 0.98;// 1-0.98
 	float preClose = 1- 0.3;
 if(p->gaitMode==0x03||p->gaitMode==0x0D)
-			prePositive=1-0.95;
+			prePositive=1-0.98;
 	if(p->legStatus[0] == 3)
-	{LF_N_OPEN;}
+	{
+		LF_N_OPEN;
+	}
 	else if(p->legStatus[0] == 1||p->legStatus[0] == 2)
-	{LF_P_OPEN;}
+	{LF_P_OPEN;
+	}
+
 	else if(p->legStatus[0] == 0)
 	{
 		if(p->statusTimes[0] < p->statusTimesBuffer[0][0] * prePositive)
@@ -252,7 +256,8 @@ if(p->gaitMode==0x03||p->gaitMode==0x0D)
 	}
 
 	if(p->legStatus[1] == 3)
-	{RF_N_OPEN;}
+	{	
+		RF_N_OPEN;}
 	else if(p->legStatus[1] == 1||p->legStatus[1] == 2)
 	{RF_P_OPEN;}
 	else if(p->legStatus[1] == 0)

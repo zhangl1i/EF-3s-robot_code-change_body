@@ -51,7 +51,7 @@ int main(void){
     CLASSMC_setCoMVel(&mc, targetCoMVelocityBuffer);	
     CLASSMC_inverseKinematics(&mc);
     CLASSMC_setJointPosition(&mc);	
-    runFlag = 01;
+    runFlag = 00;
     controlRunFlag=01;
     MX_ADC1_Init();
     HAL_GPIO_WritePin(GPIOC,GPIO_PIN_13,GPIO_PIN_RESET);//vcc_led
@@ -82,7 +82,7 @@ int main(void){
     sprintf(tx_buf, "$PRS,%d,%d,%d,%d\n", adc[0], adc[1], adc[2], adc[3]);
     
     // 通过 UART7 发送
-    // 注意：你的 uart.c 里初始化的是 huart7
+    // 注意： uart.c 里初始化的是 huart7
     // 超时时间设个 10ms 够了，别阻塞主循环太久
     HAL_UART_Transmit(&huart7, (uint8_t*)tx_buf, strlen(tx_buf), 10);
     // ============== end==============   
